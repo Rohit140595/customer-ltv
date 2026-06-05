@@ -1,0 +1,27 @@
+# Data — download from Kaggle, never commit raw CSVs
+data/raw/
+data/processed/
+
+# Trained artifacts — regenerable from notebooks
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS
+.DS_Store
