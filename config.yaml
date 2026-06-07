@@ -9,12 +9,14 @@ paths:
   shap_cache:    models/shap_features.json
 
 data:
-  # Prediction horizon: how many days ahead to predict customer spend
+  # Cutoff date — features use orders before this date; target uses orders after
+  cutoff_date: "2018-07-01"
+  # Prediction horizon: how many days after cutoff to measure future spend
   horizon_days: 90
-  # Observation window: how many days of history to use for features
-  observation_days: 180
-  # Minimum orders a customer must have to be included in training
+  # Only include customers with at least one delivered order before cutoff
   min_orders: 1
+  # Only score delivered orders — exclude cancelled/unavailable
+  valid_statuses: ["delivered"]
 
 split:
   train_frac: 0.80   # chronological 80/20 split — no random shuffling
@@ -26,13 +28,25 @@ features:
   shap_top_n: 80
 
 model:
-  # XGBoost regression — predicts 90-day future spend per customer
-  n_estimators: 500
-  learning_rate: 0.05
-  max_depth: 6
-  subsample: 0.8
-  colsample_bytree: 0.8
   random_state: 42
+  n_estimators: 500
+
+  # Stage 1: will the customer return? (binary classifier)
+  stage1:
+    learning_rate: 0.05
+    max_depth: 6
+    subsample: 0.8
+    colsample_bytree: 0.8
+    scale_pos_weight: auto   # set to neg/pos ratio at training time
+
+  # Stage 2: spend tier — High / Mid / Low (classifier, trained on returners only)
+  # Tiers are tertiles of future_spend among training-set returners
+  stage2:
+    learning_rate: 0.05
+    max_depth: 4
+    subsample: 0.8
+    colsample_bytree: 0.8
+    num_class: 3   # 0=Low, 1=Mid, 2=High
 
 tuning:
   n_trials: 50
