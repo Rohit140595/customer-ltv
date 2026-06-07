@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from datetime import datetime, timedelta
 
-from src.features import compute_rfm_features, compute_temporal_features
+from src.features import compute_rfm_features
 
 
 @pytest.fixture

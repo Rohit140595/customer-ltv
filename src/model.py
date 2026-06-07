@@ -16,9 +16,6 @@ A lift of 3x means the top decile generates 3x their proportional share of reven
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
 
 
