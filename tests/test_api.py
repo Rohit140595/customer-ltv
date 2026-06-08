@@ -7,7 +7,4 @@ Tests cover:
   - /predict returns expected response schema
 """
 
-import pytest
-from fastapi.testclient import TestClient
-
 # Tests will be implemented once src/api.py and src/predict.py are complete

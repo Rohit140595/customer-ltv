@@ -11,12 +11,7 @@ Used by:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
-
-from src.features import build_feature_matrix
-from src.model import load_model
 
 
 def predict_single(
