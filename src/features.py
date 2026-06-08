@@ -68,6 +68,15 @@ def compute_behavioral_features(
         unique_sellers      : distinct sellers transacted with before cutoff.
         avg_review_score    : mean review score across all orders before cutoff.
         pct_installments    : share of orders paid in more than 1 installment.
+        pct_credit_card     : fraction of orders paid by credit card.
+        pct_boleto          : fraction of orders paid by boleto (cash-equivalent —
+                              boleto buyers are much less likely to return).
+        top_category_freq   : frequency of the customer's most purchased product
+                              category — proxy for niche vs. mainstream shopper.
+        has_reviewed        : 1 if the customer left at least one review before
+                              cutoff — engaged customers are more likely to return.
+        is_consumable_category : 1 if top category is a naturally repeat-purchase
+                              product (health/beauty, food, pet, etc.).
         avg_items_per_order : average number of items per order.
         avg_freight_ratio   : average (freight / total_price) per order — proxy
                               for purchase distance / item size.
@@ -87,13 +96,13 @@ def compute_behavioral_features(
     pre["freight_ratio"] = pre["total_freight"] / pre["total_price"].replace(0, np.nan)
 
     behavioral = pre.groupby(customer_col).agg(
-        unique_categories   = ("unique_categories",  "sum"),
-        unique_sellers      = ("unique_sellers",      "sum"),
-        avg_review_score    = ("review_score",        "mean"),
-        avg_items_per_order = ("item_count",          "mean"),
-        avg_freight_ratio   = ("freight_ratio",       "mean"),
-        pct_installments    = ("max_installments",    lambda x: (x > 1).mean()),
-        has_voucher         = ("has_voucher",         "max"),
+        unique_categories   = ("unique_categories", "sum"),
+        unique_sellers      = ("unique_sellers",     "sum"),
+        avg_review_score    = ("review_score",       "mean"),
+        avg_items_per_order = ("item_count",         "mean"),
+        avg_freight_ratio   = ("freight_ratio",      "mean"),
+        pct_installments    = ("max_installments",   lambda x: (x > 1).mean()),
+        has_voucher         = ("has_voucher",        "max"),
     ).reset_index()
 
     return behavioral
@@ -176,6 +185,81 @@ def compute_temporal_features(
     return customers
 
 
+def compute_delivery_features(
+    abt: pd.DataFrame,
+    cutoff_date: pd.Timestamp,
+    customer_col: str = "customer_unique_id",
+) -> pd.DataFrame:
+    """
+    Compute delivery experience and geography features per customer.
+
+    Delivery experience is a strong proxy for satisfaction and return intent —
+    customers who received late deliveries are less likely to buy again.
+
+    Adds:
+        avg_delivery_delay_days : mean (actual_delivery - estimated_delivery)
+                                  in days. Positive = late, negative = early.
+        pct_late_deliveries     : fraction of orders delivered after the
+                                  estimated date.
+        avg_delivery_speed_days : mean days from purchase to delivery — proxy
+                                  for logistics quality.
+        customer_state_freq     : frequency of the customer's state in the
+                                  pre-cutoff dataset — encodes how large/active
+                                  each market is without leaking the target.
+
+    Args:
+        abt:         Analytical base table (one row per order).
+        cutoff_date: Only orders strictly before this date are used.
+        customer_col: Column identifying the customer.
+
+    Returns:
+        DataFrame with one row per customer and delivery feature columns.
+    """
+    pre = abt[abt["order_purchase_timestamp"] < cutoff_date].copy()
+
+    # Parse delivery timestamps if not already datetime
+    for col in ["order_delivered_customer_date", "order_estimated_delivery_date"]:
+        if col in pre.columns:
+            pre[col] = pd.to_datetime(pre[col])
+
+    # Delivery delay: positive = arrived late, negative = arrived early
+    pre["delivery_delay_days"] = (
+        pre["order_delivered_customer_date"] - pre["order_estimated_delivery_date"]
+    ).dt.days
+
+    # Delivery speed: days from purchase to actual delivery
+    pre["delivery_speed_days"] = (
+        pre["order_delivered_customer_date"] - pre["order_purchase_timestamp"]
+    ).dt.days
+
+    pre["is_late"] = (pre["delivery_delay_days"] > 0).astype(float)
+
+    delivery = pre.groupby(customer_col).agg(
+        avg_delivery_delay_days = ("delivery_delay_days", "mean"),
+        pct_late_deliveries     = ("is_late",             "mean"),
+        avg_delivery_speed_days = ("delivery_speed_days", "mean"),
+    ).reset_index()
+
+    # Customer state — take the state from the customer's most recent pre-cutoff order
+    latest_state = (
+        pre.sort_values("order_purchase_timestamp")
+        .groupby(customer_col)["customer_state"]
+        .last()
+        .reset_index()
+    )
+    # Frequency encode: how many customers are in each state (pre-cutoff)
+    state_freq = pre[customer_col].map(
+        latest_state.set_index(customer_col)["customer_state"]
+    )
+    state_counts = latest_state["customer_state"].value_counts().to_dict()
+    latest_state["customer_state_freq"] = latest_state["customer_state"].map(state_counts)
+    latest_state = latest_state.drop(columns=["customer_state"])
+
+    delivery = delivery.merge(latest_state, on=customer_col, how="left")
+
+    return delivery
+
+
 def build_feature_matrix(
     abt: pd.DataFrame,
     cutoff_date: pd.Timestamp,
@@ -200,11 +284,13 @@ def build_feature_matrix(
     rfm        = compute_rfm_features(abt, cutoff_date)
     behavioral = compute_behavioral_features(abt, cutoff_date)
     temporal   = compute_temporal_features(abt, cutoff_date)
+    delivery   = compute_delivery_features(abt, cutoff_date)
 
     features = (
         rfm
         .merge(behavioral, on="customer_unique_id", how="left")
         .merge(temporal,   on="customer_unique_id", how="left")
+        .merge(delivery,   on="customer_unique_id", how="left")
     )
 
     print(f"Feature matrix: {features.shape[0]:,} customers × {features.shape[1]} features")

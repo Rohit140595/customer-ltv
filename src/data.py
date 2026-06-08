@@ -50,10 +50,15 @@ def load_raw_tables(raw_dir: str) -> dict[str, pd.DataFrame]:
     }
 
     # Parse all timestamp columns upfront
-    for ts_col in ["order_purchase_timestamp", "order_delivered_customer_date",
+    for ts_col in ["order_purchase_timestamp", "order_approved_at",
+                   "order_delivered_carrier_date", "order_delivered_customer_date",
                    "order_estimated_delivery_date"]:
         if ts_col in tables["orders"].columns:
             tables["orders"][ts_col] = pd.to_datetime(tables["orders"][ts_col])
+
+    for ts_col in ["review_creation_date", "review_answer_timestamp"]:
+        if ts_col in tables["reviews"].columns:
+            tables["reviews"][ts_col] = pd.to_datetime(tables["reviews"][ts_col])
 
     print("Loaded tables:")
     for name, df in tables.items():
@@ -127,6 +132,7 @@ def build_analytical_base_table(
         item_count          = ("order_item_id", "count"),
         unique_sellers      = ("seller_id", "nunique"),
         unique_categories   = ("product_category_name_english", "nunique"),
+        top_category        = ("product_category_name_english", lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else None),
     ).reset_index()
 
     # 4. Aggregate payments → one row per order
@@ -135,11 +141,16 @@ def build_analytical_base_table(
         payment_value        = ("payment_value", "sum"),
         max_installments     = ("payment_installments", "max"),
         has_voucher          = ("payment_type", lambda x: int("voucher" in x.values)),
+        is_credit_card       = ("payment_type", lambda x: int("credit_card" in x.values)),
+        is_boleto            = ("payment_type", lambda x: int("boleto" in x.values)),
     ).reset_index()
 
     # 5. Aggregate reviews → one row per order (take most recent if duplicates)
+    reviews["comment_length"] = reviews["review_comment_message"].fillna("").str.len()
     reviews_agg = reviews.sort_values("review_creation_date").groupby("order_id").agg(
-        review_score = ("review_score", "last"),
+        review_score          = ("review_score",         "last"),
+        review_comment_length = ("comment_length",       "last"),
+        review_creation_date  = ("review_creation_date", "last"),
     ).reset_index()
 
     # 6. Join everything onto orders

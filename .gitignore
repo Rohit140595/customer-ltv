@@ -25,3 +25,11 @@ venv/
 
 # OS
 .DS_Store
+.venv/
+
+# MLflow experiment tracking — regenerable by running the notebook
+mlruns/
+
+# Pipenv — project uses requirements.txt
+Pipfile
+Pipfile.lock
