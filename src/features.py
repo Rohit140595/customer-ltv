@@ -248,9 +248,6 @@ def compute_delivery_features(
         .reset_index()
     )
     # Frequency encode: how many customers are in each state (pre-cutoff)
-    state_freq = pre[customer_col].map(
-        latest_state.set_index(customer_col)["customer_state"]
-    )
     state_counts = latest_state["customer_state"].value_counts().to_dict()
     latest_state["customer_state_freq"] = latest_state["customer_state"].map(state_counts)
     latest_state = latest_state.drop(columns=["customer_state"])
