@@ -52,7 +52,7 @@ def _orders_to_abt(orders: list[dict], customer_id: str) -> pd.DataFrame:
             "unique_categories":             1,   # unknown at API time
             "unique_sellers":                1,   # unknown at API time
             "has_voucher":                   0,   # conservative default
-            "review_score":                  o.get("review_score"),
+            "review_score":                  float(o["review_score"]) if o.get("review_score") is not None else float("nan"),
             "order_delivered_customer_date": pd.Timestamp(o["order_delivered_customer_date"])
                                              if o.get("order_delivered_customer_date") else pd.NaT,
             "order_estimated_delivery_date": pd.Timestamp(o["order_estimated_delivery_date"])
